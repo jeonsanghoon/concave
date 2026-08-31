@@ -2,9 +2,24 @@ import {
   createOnlineRoom,
   joinOnlineRoom,
   fetchRoomState,
+  fetchRoomList,
   sendOnlineMove,
   copyRoomCode,
+  sanitizeName,
+  savePlayerName,
+  saveLocalNames,
+  getLocalNames,
 } from './online.js';
+import {
+  login,
+  register,
+  logout,
+  checkSession,
+  enterGuestMode,
+  isLoggedIn,
+  isGuestMode,
+  getCurrentUser,
+} from './auth.js';
 
 (() => {
   const SIZE = 15;
@@ -14,6 +29,7 @@ import {
 
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
+  const authScreenEl = document.getElementById('auth-screen');
   const menuEl = document.getElementById('menu');
   const gameEl = document.getElementById('game');
   const onlineLobbyEl = document.getElementById('online-lobby');
@@ -36,6 +52,23 @@ import {
   const waitingStatusEl = document.getElementById('waiting-status');
   const panelCreateEl = document.getElementById('panel-create');
   const panelJoinEl = document.getElementById('panel-join');
+  const panelListEl = document.getElementById('panel-list');
+  const roomListEl = document.getElementById('room-list');
+  const storageWarningEl = document.getElementById('storage-warning');
+  const nameBlackInput = document.getElementById('name-black');
+  const nameWhiteInput = document.getElementById('name-white');
+  const nameWhiteField = document.getElementById('name-white-field');
+  const onlineNameInput = document.getElementById('online-name');
+  const onlineNameSetup = document.getElementById('online-name-setup');
+  const userBarEl = document.getElementById('user-bar');
+  const userGreetingEl = document.getElementById('user-greeting');
+  const authErrorEl = document.getElementById('auth-error');
+  const authTitleEl = document.getElementById('auth-title');
+  const authSubmitBtn = document.getElementById('auth-submit-btn');
+  const authUsernameInput = document.getElementById('auth-username');
+  const authPasswordInput = document.getElementById('auth-password');
+
+  let authMode = 'login';
 
   const PADDING = 30;
   const CELL = (canvas.width - PADDING * 2) / (SIZE - 1);
@@ -52,8 +85,10 @@ import {
 
   let onlineRoomId = null;
   let onlineMyColor = null;
+  let onlineNames = { black: '흑', white: '백' };
   let pollTimer = null;
   let waitPollTimer = null;
+  let roomListTimer = null;
   let lastSyncedMoveCount = 0;
 
   function initBoard() {
@@ -74,6 +109,82 @@ import {
     if (waitPollTimer) {
       clearInterval(waitPollTimer);
       waitPollTimer = null;
+    }
+    if (roomListTimer) {
+      clearInterval(roomListTimer);
+      roomListTimer = null;
+    }
+  }
+
+  function switchLobbyTab(tab) {
+    document.querySelectorAll('.lobby-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    panelListEl.classList.toggle('hidden', tab !== 'list');
+    panelCreateEl.classList.toggle('hidden', tab !== 'create');
+    panelJoinEl.classList.toggle('hidden', tab !== 'join');
+    lobbyWaitingEl.classList.add('hidden');
+    hideLobbyError();
+
+    if (tab === 'list') {
+      refreshRoomList();
+      if (!roomListTimer) {
+        roomListTimer = setInterval(refreshRoomList, 3000);
+      }
+    } else if (roomListTimer) {
+      clearInterval(roomListTimer);
+      roomListTimer = null;
+    }
+  }
+
+  async function refreshRoomList() {
+    try {
+      const { rooms, redisConfigured } = await fetchRoomList();
+      if (!redisConfigured && window.location.hostname !== 'localhost') {
+        storageWarningEl.textContent = '⚠️ 서버 저장소(Redis) 미연결 — 방 참가가 불가능할 수 있습니다. Vercel에서 Upstash Redis를 연결해 주세요.';
+        storageWarningEl.classList.remove('hidden');
+      } else {
+        storageWarningEl.classList.add('hidden');
+      }
+
+      if (rooms.length === 0) {
+        roomListEl.innerHTML = '<li class="room-list-empty">대기 중인 방이 없습니다.</li>';
+        return;
+      }
+
+      roomListEl.innerHTML = rooms.map(room => `
+        <li class="room-list-item" data-room-id="${room.id}">
+          <div>
+            <div class="room-list-code">${room.id}</div>
+            <div class="room-list-host">방장: ${room.blackName}</div>
+          </div>
+          <span class="room-list-status">참가 →</span>
+        </li>
+      `).join('');
+
+      roomListEl.querySelectorAll('.room-list-item').forEach(item => {
+        item.addEventListener('click', () => joinRoomById(item.dataset.roomId));
+      });
+    } catch (err) {
+      roomListEl.innerHTML = `<li class="room-list-empty">${err.message}</li>`;
+    }
+  }
+
+  async function joinRoomById(roomId) {
+    hideLobbyError();
+    const playerName = getOnlineName();
+    if (!playerName) {
+      showLobbyError('닉네임을 입력하세요.');
+      return;
+    }
+    savePlayerName(playerName);
+    try {
+      const result = await joinOnlineRoom(roomId, playerName);
+      stopPolling();
+      startOnlineGame(roomId, result.color, result);
+    } catch (err) {
+      showLobbyError(err.message);
+      refreshRoomList();
     }
   }
 
@@ -195,12 +306,46 @@ import {
     return false;
   }
 
+  function loadSavedNames() {
+    const names = getLocalNames();
+    nameBlackInput.value = names.black === '플레이어 1' ? '' : names.black;
+    nameWhiteInput.value = names.white === '플레이어 2' ? '' : names.white;
+    onlineNameInput.value = nameBlackInput.value;
+  }
+
+  function getOnlineName() {
+    if (isLoggedIn()) return sanitizeName(getCurrentUser().username, '');
+    return sanitizeName(onlineNameInput.value, '');
+  }
+
+  function getLocalBlackName() {
+    return sanitizeName(nameBlackInput.value, '플레이어 1');
+  }
+
+  function getLocalWhiteName() {
+    return sanitizeName(nameWhiteInput.value, '플레이어 2');
+  }
+
+  function updatePlayerLabels(blackLabel, whiteLabel) {
+    blackNameEl.textContent = blackLabel;
+    whiteNameEl.textContent = whiteLabel;
+  }
+
+  function updateOnlineNamesFromState(state) {
+    onlineNames = {
+      black: state.blackName || '흑',
+      white: state.whiteName || '백',
+    };
+    updatePlayerLabels(onlineNames.black, onlineNames.white);
+  }
+
   function applyRemoteState(state) {
     board = state.board;
     currentPlayer = state.currentPlayer;
     lastMove = state.lastMove;
     gameOver = state.status === 'finished';
     lastSyncedMoveCount = state.moveCount;
+    updateOnlineNamesFromState(state);
 
     if (gameOver && state.winner) {
       const iWon = state.winner === onlineMyColor;
@@ -327,15 +472,21 @@ import {
     if (aiThinking) {
       statusEl.textContent = 'AI 생각 중...';
     } else if (gameMode === 'online') {
+      const myName = onlineMyColor === BLACK ? onlineNames.black : onlineNames.white;
       if (currentPlayer === onlineMyColor) {
-        statusEl.textContent = onlineMyColor === BLACK ? '내 차례 (흑)' : '내 차례 (백)';
+        statusEl.textContent = `${myName}님 차례`;
       } else {
-        statusEl.textContent = '상대 차례...';
+        const oppName = onlineMyColor === BLACK ? onlineNames.white : onlineNames.black;
+        statusEl.textContent = `${oppName}님 차례...`;
       }
     } else if (gameMode === 'pvc') {
-      statusEl.textContent = currentPlayer === BLACK ? '당신의 차례 (흑)' : 'AI 차례 (백)';
+      statusEl.textContent = currentPlayer === BLACK
+        ? `${getLocalBlackName()}님 차례`
+        : 'AI 차례';
     } else {
-      statusEl.textContent = currentPlayer === BLACK ? '흑의 차례' : '백의 차례';
+      statusEl.textContent = currentPlayer === BLACK
+        ? `${getLocalBlackName()}님 차례`
+        : `${getLocalWhiteName()}님 차례`;
     }
 
     const canUndo = gameMode !== 'online' && history.length > 0 && !aiThinking;
@@ -346,10 +497,11 @@ import {
   }
 
   function showOnlineResult(iWon, winner) {
+    const winnerName = winner === BLACK ? onlineNames.black : onlineNames.white;
     resultTitleEl.textContent = iWon ? '승리!' : '패배';
     resultMessageEl.textContent = iWon
-      ? '축하합니다! 상대를 이겼습니다.'
-      : `${winner === BLACK ? '흑' : '백'}(상대) 승리`;
+      ? '축하합니다! 승리했습니다!'
+      : `${winnerName}님 승리`;
     overlayEl.classList.remove('hidden');
   }
 
@@ -361,8 +513,9 @@ import {
         ? '축하합니다! AI를 이겼습니다.'
         : 'AI에게 졌습니다. 다시 도전해 보세요!';
     } else {
+      const winnerName = isBlack ? getLocalBlackName() : getLocalWhiteName();
       resultTitleEl.textContent = '승리!';
-      resultMessageEl.textContent = `${isBlack ? '흑' : '백'}이 이겼습니다!`;
+      resultMessageEl.textContent = `${winnerName}님 승리!`;
     }
     overlayEl.classList.remove('hidden');
   }
@@ -384,17 +537,16 @@ import {
     roomBadgeEl.classList.add('hidden');
 
     if (mode === 'pvc') {
-      blackNameEl.textContent = '나 (흑)';
-      whiteNameEl.textContent = 'AI (백)';
+      saveLocalNames(nameBlackInput.value, nameWhiteInput.value);
+      updatePlayerLabels(getLocalBlackName(), 'AI');
     } else if (mode === 'online') {
-      blackNameEl.textContent = onlineMyColor === BLACK ? '나 (흑)' : '상대 (흑)';
-      whiteNameEl.textContent = onlineMyColor === WHITE ? '나 (백)' : '상대 (백)';
+      updatePlayerLabels(onlineNames.black, onlineNames.white);
       roomBadgeEl.classList.remove('hidden');
       roomBadgeCodeEl.textContent = onlineRoomId;
       startPolling();
     } else {
-      blackNameEl.textContent = '흑';
-      whiteNameEl.textContent = '백';
+      saveLocalNames(nameBlackInput.value, nameWhiteInput.value);
+      updatePlayerLabels(getLocalBlackName(), getLocalWhiteName());
     }
 
     showGameScreen();
@@ -402,23 +554,33 @@ import {
     updateUI();
   }
 
-  function startOnlineGame(roomId, myColor) {
+  function startOnlineGame(roomId, myColor, state) {
     onlineRoomId = roomId;
     onlineMyColor = myColor === 'black' ? BLACK : WHITE;
     gameMode = 'online';
     initBoard();
     stopPolling();
 
-    blackNameEl.textContent = onlineMyColor === BLACK ? '나 (흑)' : '상대 (흑)';
-    whiteNameEl.textContent = onlineMyColor === WHITE ? '나 (백)' : '상대 (백)';
+    if (state) {
+      updateOnlineNamesFromState(state);
+    } else {
+      updatePlayerLabels(
+        onlineMyColor === BLACK ? getOnlineName() : '상대',
+        onlineMyColor === WHITE ? getOnlineName() : '상대'
+      );
+    }
+
     roomBadgeEl.classList.remove('hidden');
     roomBadgeCodeEl.textContent = roomId;
 
     showGameScreen();
-    drawBoard();
-    updateUI();
+    if (state) applyRemoteState(state);
+    else {
+      drawBoard();
+      updateUI();
+    }
     startPolling();
-    pollRoom();
+    if (!state) pollRoom();
   }
 
   function goToMenu() {
@@ -426,7 +588,9 @@ import {
     onlineRoomId = null;
     onlineMyColor = null;
     gameMode = null;
+    nameWhiteField.classList.remove('hidden');
 
+    authScreenEl.classList.add('hidden');
     menuEl.classList.remove('hidden');
     gameEl.classList.add('hidden');
     onlineLobbyEl.classList.add('hidden');
@@ -435,15 +599,73 @@ import {
     panelCreateEl.classList.remove('hidden');
     panelJoinEl.classList.add('hidden');
     hideLobbyError();
+    updateUserBar();
+  }
+
+  function showAuthScreen(message) {
+    authScreenEl.classList.remove('hidden');
+    menuEl.classList.add('hidden');
+    gameEl.classList.add('hidden');
+    onlineLobbyEl.classList.add('hidden');
+    overlayEl.classList.add('hidden');
+    if (message) showAuthError(message);
+  }
+
+  function showAuthError(msg) {
+    authErrorEl.textContent = msg;
+    authErrorEl.classList.remove('hidden');
+  }
+
+  function hideAuthError() {
+    authErrorEl.classList.add('hidden');
+    authErrorEl.textContent = '';
+  }
+
+  function applyUserToNames() {
+    if (isLoggedIn()) {
+      const username = getCurrentUser().username;
+      nameBlackInput.value = username;
+      onlineNameInput.value = username;
+      onlineNameSetup.classList.add('hidden');
+    } else {
+      onlineNameSetup.classList.remove('hidden');
+    }
+  }
+
+  function updateUserBar() {
+    if (isLoggedIn()) {
+      userGreetingEl.textContent = `👤 ${getCurrentUser().username}님`;
+      document.getElementById('logout-btn').textContent = '로그아웃';
+    } else if (isGuestMode()) {
+      userGreetingEl.textContent = '게스트 모드';
+      document.getElementById('logout-btn').textContent = '로그인';
+    }
+  }
+
+  function enterMenuAsGuest() {
+    enterGuestMode();
+    authScreenEl.classList.add('hidden');
+    menuEl.classList.remove('hidden');
+    applyUserToNames();
+    updateUserBar();
+  }
+
+  function enterMenuAsUser() {
+    authScreenEl.classList.add('hidden');
+    menuEl.classList.remove('hidden');
+    applyUserToNames();
+    updateUserBar();
   }
 
   function showOnlineLobby() {
+    if (!isLoggedIn()) {
+      showAuthScreen('온라인 대전은 로그인 후 이용할 수 있습니다.');
+      return;
+    }
     menuEl.classList.add('hidden');
     onlineLobbyEl.classList.remove('hidden');
-    lobbyWaitingEl.classList.add('hidden');
-    panelCreateEl.classList.remove('hidden');
-    panelJoinEl.classList.add('hidden');
-    hideLobbyError();
+    applyUserToNames();
+    switchLobbyTab('list');
   }
 
   function showLobbyError(msg) {
@@ -457,6 +679,11 @@ import {
   }
 
   function showWaitingRoom(roomId) {
+    if (roomListTimer) {
+      clearInterval(roomListTimer);
+      roomListTimer = null;
+    }
+    panelListEl.classList.add('hidden');
     panelCreateEl.classList.add('hidden');
     panelJoinEl.classList.add('hidden');
     lobbyWaitingEl.classList.remove('hidden');
@@ -469,7 +696,7 @@ import {
         const state = await fetchRoomState(roomId);
         if (state.status === 'playing') {
           stopPolling();
-          startOnlineGame(roomId, 'black');
+          startOnlineGame(roomId, 'black', state);
         }
       } catch {
         /* keep waiting */
@@ -505,37 +732,94 @@ import {
     btn.addEventListener('click', () => {
       if (btn.dataset.mode === 'online') {
         showOnlineLobby();
+      } else if (btn.dataset.mode === 'pvc') {
+        nameWhiteField.classList.add('hidden');
+        if (isLoggedIn()) nameBlackInput.value = getCurrentUser().username;
+        startGame(btn.dataset.mode);
       } else {
+        nameWhiteField.classList.remove('hidden');
+        if (isLoggedIn()) nameBlackInput.value = getCurrentUser().username;
         startGame(btn.dataset.mode);
       }
     });
   });
 
-  document.querySelectorAll('.lobby-tab').forEach(tab => {
+  document.querySelectorAll('.auth-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.lobby-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      const isCreate = tab.dataset.tab === 'create';
-      panelCreateEl.classList.toggle('hidden', !isCreate);
-      panelJoinEl.classList.toggle('hidden', isCreate);
-      lobbyWaitingEl.classList.add('hidden');
-      hideLobbyError();
+      authMode = tab.dataset.auth;
+      authTitleEl.textContent = authMode === 'login' ? '로그인' : '회원가입';
+      authSubmitBtn.textContent = authMode === 'login' ? '로그인' : '가입하기';
+      authPasswordInput.autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+      hideAuthError();
     });
   });
+
+  authSubmitBtn.addEventListener('click', async () => {
+    hideAuthError();
+    const username = authUsernameInput.value.trim();
+    const password = authPasswordInput.value;
+    if (!username || !password) {
+      showAuthError('아이디와 비밀번호를 입력하세요.');
+      return;
+    }
+    try {
+      if (authMode === 'register') {
+        await register(username, password);
+        await login(username, password);
+      } else {
+        await login(username, password);
+      }
+      authPasswordInput.value = '';
+      enterMenuAsUser();
+    } catch (err) {
+      showAuthError(err.message);
+    }
+  });
+
+  document.getElementById('guest-btn').addEventListener('click', () => {
+    hideAuthError();
+    enterMenuAsGuest();
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    if (isLoggedIn()) {
+      await logout();
+      showAuthScreen();
+    } else {
+      showAuthScreen();
+    }
+  });
+
+  authPasswordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') authSubmitBtn.click();
+  });
+
+  document.querySelectorAll('.lobby-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchLobbyTab(tab.dataset.tab));
+  });
+
+  document.getElementById('refresh-room-list-btn').addEventListener('click', refreshRoomList);
 
   document.getElementById('lobby-back-btn').addEventListener('click', goToMenu);
   document.getElementById('cancel-wait-btn').addEventListener('click', () => {
     stopPolling();
     onlineRoomId = null;
-    lobbyWaitingEl.classList.add('hidden');
-    panelCreateEl.classList.remove('hidden');
-    hideLobbyError();
+    switchLobbyTab('list');
   });
 
   document.getElementById('create-room-btn').addEventListener('click', async () => {
     hideLobbyError();
+    const playerName = getOnlineName();
+    if (!playerName) {
+      showLobbyError('닉네임을 입력하세요.');
+      onlineNameInput.focus();
+      return;
+    }
+    savePlayerName(playerName);
     try {
-      const { roomId } = await createOnlineRoom();
+      const { roomId } = await createOnlineRoom(playerName);
       showWaitingRoom(roomId);
     } catch (err) {
       showLobbyError(err.message);
@@ -544,21 +828,24 @@ import {
 
   document.getElementById('join-room-btn').addEventListener('click', async () => {
     hideLobbyError();
+    const playerName = getOnlineName();
+    if (!playerName) {
+      showLobbyError('닉네임을 입력하세요.');
+      onlineNameInput.focus();
+      return;
+    }
+    savePlayerName(playerName);
     const code = document.getElementById('room-code-input').value.trim().toUpperCase();
     if (code.length !== 6) {
       showLobbyError('6자리 방 코드를 입력하세요.');
       return;
     }
     try {
-      const result = await joinOnlineRoom(code);
+      const result = await joinOnlineRoom(code, playerName);
       stopPolling();
-      startOnlineGame(code, result.color);
+      startOnlineGame(code, result.color, result);
     } catch (err) {
-      const messages = {
-        ROOM_NOT_FOUND: '방을 찾을 수 없습니다.',
-        ROOM_FULL: '방이 가득 찼습니다.',
-      };
-      showLobbyError(messages[err.message] || err.message);
+      showLobbyError(err.message);
     }
   });
 
@@ -586,4 +873,21 @@ import {
     }
   });
   backMenuBtn.addEventListener('click', goToMenu);
+
+  nameBlackInput.addEventListener('input', () => {
+    onlineNameInput.value = nameBlackInput.value;
+  });
+
+  onlineNameInput.addEventListener('input', () => {
+    nameBlackInput.value = onlineNameInput.value;
+  });
+
+  async function initApp() {
+    loadSavedNames();
+    const user = await checkSession();
+    if (user) enterMenuAsUser();
+    else showAuthScreen();
+  }
+
+  initApp();
 })();

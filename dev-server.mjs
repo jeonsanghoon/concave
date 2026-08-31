@@ -40,6 +40,37 @@ async function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
+  const authRoutes = {
+    '/api/auth/register': './api/auth/register.js',
+    '/api/auth/login': './api/auth/login.js',
+    '/api/auth/me': './api/auth/me.js',
+    '/api/health': './api/health.js',
+  };
+
+  if (authRoutes[url.pathname]) {
+    const handler = (await import(authRoutes[url.pathname])).default;
+    const mock = mockRes();
+    req.query = Object.fromEntries(url.searchParams);
+    req.headers = req.headers || {};
+    if (req.method === 'POST' || req.method === 'DELETE') req.body = await readBody(req);
+    await handler(req, mock);
+    const { statusCode, headers, body } = mock.result;
+    res.writeHead(statusCode, { 'Content-Type': 'application/json', ...headers });
+    res.end(body);
+    return;
+  }
+
+  if (url.pathname === '/api/room/list') {
+    const handler = (await import('./api/room/list.js')).default;
+    const mock = mockRes();
+    req.query = Object.fromEntries(url.searchParams);
+    await handler(req, mock);
+    const { statusCode, headers, body } = mock.result;
+    res.writeHead(statusCode, { 'Content-Type': 'application/json', ...headers });
+    res.end(body);
+    return;
+  }
+
   if (url.pathname === '/api/room/create' && req.method === 'POST') {
     const handler = (await import('./api/room/create.js')).default;
     const mock = mockRes();

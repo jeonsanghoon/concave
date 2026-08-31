@@ -13,7 +13,46 @@
       <p class="subtitle">15×15 · 다섯 개 연속으로 승리</p>
     </header>
 
-    <section class="menu" id="menu">
+    <section class="auth-screen" id="auth-screen">
+      <div class="auth-card">
+        <h2 id="auth-title">로그인</h2>
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-auth="login">로그인</button>
+          <button class="auth-tab" data-auth="register">회원가입</button>
+        </div>
+        <div class="auth-form">
+          <div class="name-field">
+            <label for="auth-username">아이디</label>
+            <input class="name-input" id="auth-username" type="text" maxlength="12" placeholder="2~12자" autocomplete="username">
+          </div>
+          <div class="name-field">
+            <label for="auth-password">비밀번호</label>
+            <input class="name-input" id="auth-password" type="password" maxlength="32" placeholder="4자 이상" autocomplete="current-password">
+          </div>
+          <p class="auth-error hidden" id="auth-error"></p>
+          <button class="ctrl-btn auth-submit" id="auth-submit-btn">로그인</button>
+          <button class="ctrl-btn secondary guest-btn" id="guest-btn">게스트로 시작</button>
+        </div>
+        <p class="auth-hint">온라인 대전은 로그인 후 이용 가능합니다.</p>
+      </div>
+    </section>
+
+    <section class="menu hidden" id="menu">
+      <div class="user-bar" id="user-bar">
+        <span class="user-greeting" id="user-greeting"></span>
+        <button class="ctrl-btn secondary small-btn" id="logout-btn">로그아웃</button>
+      </div>
+      <div class="name-setup">
+        <div class="name-field">
+          <label for="name-black">흑 닉네임</label>
+          <input class="name-input" id="name-black" type="text" maxlength="12" placeholder="닉네임 입력" autocomplete="off">
+        </div>
+        <div class="name-field" id="name-white-field">
+          <label for="name-white">백 닉네임</label>
+          <input class="name-input" id="name-white" type="text" maxlength="12" placeholder="닉네임 입력" autocomplete="off">
+        </div>
+      </div>
+
       <h2>게임 모드 선택</h2>
       <div class="mode-buttons">
         <button class="mode-btn" data-mode="pvp">
@@ -38,12 +77,31 @@
       <button class="back-link" id="lobby-back-btn">← 메뉴로</button>
       <h2>온라인 대전</h2>
 
-      <div class="lobby-tabs">
-        <button class="lobby-tab active" data-tab="create">방 만들기</button>
-        <button class="lobby-tab" data-tab="join">방 참가</button>
+      <div class="name-setup lobby-name hidden" id="online-name-setup">
+        <div class="name-field">
+          <label for="online-name">내 닉네임</label>
+          <input class="name-input" id="online-name" type="text" maxlength="12" placeholder="닉네임 입력" autocomplete="off">
+        </div>
       </div>
 
-      <div class="lobby-panel" id="panel-create">
+      <div class="lobby-tabs">
+        <button class="lobby-tab active" data-tab="list">방 목록</button>
+        <button class="lobby-tab" data-tab="create">방 만들기</button>
+        <button class="lobby-tab" data-tab="join">코드 참가</button>
+      </div>
+
+      <div class="lobby-panel" id="panel-list">
+        <div class="room-list-header">
+          <p class="lobby-desc">대기 중인 방 목록입니다. 클릭하면 바로 참가합니다.</p>
+          <button class="ctrl-btn secondary small-btn" id="refresh-room-list-btn">새로고침</button>
+        </div>
+        <p class="storage-warning hidden" id="storage-warning"></p>
+        <ul class="room-list" id="room-list">
+          <li class="room-list-empty">방 목록을 불러오는 중...</li>
+        </ul>
+      </div>
+
+      <div class="lobby-panel hidden" id="panel-create">
         <p class="lobby-desc">방을 만들고 코드를 친구에게 공유하세요.<br>방장은 <strong>흑</strong>으로 먼저 둡니다.</p>
         <button class="ctrl-btn lobby-action" id="create-room-btn">새 방 만들기</button>
       </div>

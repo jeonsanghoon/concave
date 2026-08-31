@@ -1,4 +1,12 @@
+const NAME_KEY = 'omok-player-name';
+const NAME_BLACK_KEY = 'omok-name-black';
+const NAME_WHITE_KEY = 'omok-name-white';
+
+import { getCurrentUser, isLoggedIn } from './auth.js';
+
 export function getPlayerId() {
+  if (isLoggedIn()) return getCurrentUser().id;
+
   let id = localStorage.getItem('omok-player-id');
   if (!id) {
     id = crypto.randomUUID();
@@ -7,39 +15,78 @@ export function getPlayerId() {
   return id;
 }
 
-export async function createOnlineRoom() {
+export function sanitizeName(name, fallback = '플레이어') {
+  const trimmed = (name || '').trim().slice(0, 12);
+  return trimmed || fallback;
+}
+
+export function getPlayerName() {
+  return sanitizeName(localStorage.getItem(NAME_KEY));
+}
+
+export function savePlayerName(name) {
+  const sanitized = sanitizeName(name, '');
+  if (sanitized) localStorage.setItem(NAME_KEY, sanitized);
+  return sanitized;
+}
+
+export function getLocalNames() {
+  return {
+    black: sanitizeName(localStorage.getItem(NAME_BLACK_KEY), '플레이어 1'),
+    white: sanitizeName(localStorage.getItem(NAME_WHITE_KEY), '플레이어 2'),
+  };
+}
+
+export function saveLocalNames(black, white) {
+  localStorage.setItem(NAME_BLACK_KEY, sanitizeName(black, '플레이어 1'));
+  localStorage.setItem(NAME_WHITE_KEY, sanitizeName(white, '플레이어 2'));
+}
+
+function parseApiError(res, data, fallback) {
+  const msg = data.message || data.error || fallback;
+  const errorMap = {
+    ROOM_NOT_FOUND: '방을 찾을 수 없습니다. 방 목록을 새로고침해 보세요.',
+    ROOM_FULL: '방이 가득 찼습니다.',
+    STORAGE_UNAVAILABLE: '서버 저장소(Redis) 연결이 필요합니다. 관리자에게 문의하세요.',
+    'playerName required': '닉네임을 입력하세요.',
+  };
+  throw new Error(errorMap[data.error] || msg);
+}
+
+export async function createOnlineRoom(playerName) {
   const res = await fetch('/api/room/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ playerId: getPlayerId() }),
+    body: JSON.stringify({ playerId: getPlayerId(), playerName }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || '방 생성 실패');
-  }
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) parseApiError(res, data, '방 생성 실패');
+  return data;
 }
 
-export async function joinOnlineRoom(roomId) {
+export async function joinOnlineRoom(roomId, playerName) {
   const res = await fetch(`/api/room/${roomId.toUpperCase()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ playerId: getPlayerId(), action: 'join' }),
+    body: JSON.stringify({ playerId: getPlayerId(), playerName, action: 'join' }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || '참가 실패');
-  }
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) parseApiError(res, data, '참가 실패');
+  return data;
+}
+
+export async function fetchRoomList() {
+  const res = await fetch('/api/room/list');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || data.error || '방 목록 조회 실패');
+  return data;
 }
 
 export async function fetchRoomState(roomId) {
   const res = await fetch(`/api/room/${roomId}?playerId=${getPlayerId()}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || '상태 조회 실패');
-  }
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) parseApiError(res, data, '상태 조회 실패');
+  return data;
 }
 
 export async function sendOnlineMove(roomId, row, col) {
@@ -48,11 +95,9 @@ export async function sendOnlineMove(roomId, row, col) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ playerId: getPlayerId(), action: 'move', row, col }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || '착수 실패');
-  }
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) parseApiError(res, data, '착수 실패');
+  return data;
 }
 
 export async function copyRoomCode(code) {
