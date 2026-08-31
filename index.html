@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오목</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>오목</h1>
+      <p class="subtitle">15×15 · 다섯 개 연속으로 승리</p>
+    </header>
+
+    <section class="menu" id="menu">
+      <h2>게임 모드 선택</h2>
+      <div class="mode-buttons">
+        <button class="mode-btn" data-mode="pvp">
+          <span class="mode-icon">👥</span>
+          <span class="mode-title">사람 vs 사람</span>
+          <span class="mode-desc">같은 기기에서 번갈아 두기</span>
+        </button>
+        <button class="mode-btn" data-mode="pvc">
+          <span class="mode-icon">🤖</span>
+          <span class="mode-title">사람 vs 컴퓨터</span>
+          <span class="mode-desc">AI와 대결 (흑: 플레이어)</span>
+        </button>
+        <button class="mode-btn" data-mode="online">
+          <span class="mode-icon">🌐</span>
+          <span class="mode-title">온라인 대전</span>
+          <span class="mode-desc">방 코드로 친구와 원격 대전</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="online-lobby hidden" id="online-lobby">
+      <button class="back-link" id="lobby-back-btn">← 메뉴로</button>
+      <h2>온라인 대전</h2>
+
+      <div class="lobby-tabs">
+        <button class="lobby-tab active" data-tab="create">방 만들기</button>
+        <button class="lobby-tab" data-tab="join">방 참가</button>
+      </div>
+
+      <div class="lobby-panel" id="panel-create">
+        <p class="lobby-desc">방을 만들고 코드를 친구에게 공유하세요.<br>방장은 <strong>흑</strong>으로 먼저 둡니다.</p>
+        <button class="ctrl-btn lobby-action" id="create-room-btn">새 방 만들기</button>
+      </div>
+
+      <div class="lobby-panel hidden" id="panel-join">
+        <p class="lobby-desc">친구에게 받은 6자리 방 코드를 입력하세요.</p>
+        <input class="room-input" id="room-code-input" type="text" maxlength="6" placeholder="예: ABC123" autocomplete="off">
+        <button class="ctrl-btn lobby-action" id="join-room-btn">참가하기</button>
+      </div>
+
+      <div class="lobby-waiting hidden" id="lobby-waiting">
+        <p class="waiting-label">방 코드</p>
+        <div class="room-code-display">
+          <span id="room-code-text">------</span>
+          <button class="copy-btn" id="copy-code-btn" title="복사">📋</button>
+        </div>
+        <p class="waiting-status" id="waiting-status">상대를 기다리는 중...</p>
+        <button class="ctrl-btn secondary" id="cancel-wait-btn">취소</button>
+      </div>
+
+      <p class="lobby-error hidden" id="lobby-error"></p>
+    </section>
+
+    <section class="game hidden" id="game">
+      <div class="game-info">
+        <div class="player-info black-player">
+          <span class="stone-preview black"></span>
+          <span class="player-name" id="black-name">흑</span>
+        </div>
+        <div class="status" id="status">흑의 차례</div>
+        <div class="player-info white-player">
+          <span class="stone-preview white"></span>
+          <span class="player-name" id="white-name">백</span>
+        </div>
+      </div>
+
+      <div class="board-wrapper">
+        <canvas id="board" width="600" height="600"></canvas>
+      </div>
+
+      <div class="room-badge hidden" id="room-badge">
+        방: <span id="room-badge-code"></span>
+      </div>
+
+      <div class="controls">
+        <button class="ctrl-btn" id="undo-btn">한 수 무르기</button>
+        <button class="ctrl-btn" id="restart-btn">다시 시작</button>
+        <button class="ctrl-btn secondary" id="menu-btn">메뉴로</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="overlay hidden" id="overlay">
+    <div class="modal">
+      <h2 id="result-title">승리!</h2>
+      <p id="result-message"></p>
+      <div class="modal-buttons">
+        <button class="ctrl-btn" id="play-again-btn">다시 하기</button>
+        <button class="ctrl-btn secondary" id="back-menu-btn">메뉴로</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="ai.js"></script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
