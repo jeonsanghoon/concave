@@ -46,6 +46,7 @@ import {
   const backMenuBtn = document.getElementById('back-menu-btn');
   const roomBadgeEl = document.getElementById('room-badge');
   const roomBadgeCodeEl = document.getElementById('room-badge-code');
+  const roomBadgeNameEl = document.getElementById('room-badge-name');
   const lobbyErrorEl = document.getElementById('lobby-error');
   const lobbyWaitingEl = document.getElementById('lobby-waiting');
   const roomCodeTextEl = document.getElementById('room-code-text');
@@ -55,6 +56,8 @@ import {
   const panelListEl = document.getElementById('panel-list');
   const roomListEl = document.getElementById('room-list');
   const storageWarningEl = document.getElementById('storage-warning');
+  const roomNameInput = document.getElementById('room-name-input');
+  const waitingRoomTitleEl = document.getElementById('waiting-room-title');
   const nameBlackInput = document.getElementById('name-black');
   const nameWhiteInput = document.getElementById('name-white');
   const nameWhiteField = document.getElementById('name-white-field');
@@ -84,6 +87,7 @@ import {
   let aiThinking = false;
 
   let onlineRoomId = null;
+  let onlineRoomName = '';
   let onlineMyColor = null;
   let onlineNames = { black: '흑', white: '백' };
   let pollTimer = null;
@@ -131,6 +135,10 @@ import {
       if (!roomListTimer) {
         roomListTimer = setInterval(refreshRoomList, 3000);
       }
+    } else if (tab === 'create' && isLoggedIn()) {
+      if (!roomNameInput.value.trim()) {
+        roomNameInput.placeholder = `${getCurrentUser().username}의 방`;
+      }
     } else if (roomListTimer) {
       clearInterval(roomListTimer);
       roomListTimer = null;
@@ -155,8 +163,8 @@ import {
       roomListEl.innerHTML = rooms.map(room => `
         <li class="room-list-item" data-room-id="${room.id}">
           <div>
-            <div class="room-list-code">${room.id}</div>
-            <div class="room-list-host">방장: ${room.blackName}</div>
+            <div class="room-list-name">${escapeHtml(room.roomName || room.id)}</div>
+            <div class="room-list-meta">${room.id} · 방장: ${escapeHtml(room.blackName)}</div>
           </div>
           <span class="room-list-status">참가 →</span>
         </li>
@@ -339,6 +347,20 @@ import {
     updatePlayerLabels(onlineNames.black, onlineNames.white);
   }
 
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function updateRoomBadge(name, code) {
+    onlineRoomName = name || code || '';
+    roomBadgeNameEl.textContent = onlineRoomName;
+    roomBadgeCodeEl.textContent = code || '';
+  }
+
   function applyRemoteState(state) {
     board = state.board;
     currentPlayer = state.currentPlayer;
@@ -346,6 +368,7 @@ import {
     gameOver = state.status === 'finished';
     lastSyncedMoveCount = state.moveCount;
     updateOnlineNamesFromState(state);
+    if (state.roomName) updateRoomBadge(state.roomName, state.id);
 
     if (gameOver && state.winner) {
       const iWon = state.winner === onlineMyColor;
@@ -571,7 +594,7 @@ import {
     }
 
     roomBadgeEl.classList.remove('hidden');
-    roomBadgeCodeEl.textContent = roomId;
+    updateRoomBadge(state?.roomName, roomId);
 
     showGameScreen();
     if (state) applyRemoteState(state);
@@ -678,7 +701,7 @@ import {
     lobbyErrorEl.textContent = '';
   }
 
-  function showWaitingRoom(roomId) {
+  function showWaitingRoom(roomId, roomName) {
     if (roomListTimer) {
       clearInterval(roomListTimer);
       roomListTimer = null;
@@ -688,8 +711,10 @@ import {
     panelJoinEl.classList.add('hidden');
     lobbyWaitingEl.classList.remove('hidden');
     roomCodeTextEl.textContent = roomId;
+    waitingRoomTitleEl.textContent = roomName || roomId;
     waitingStatusEl.textContent = '상대를 기다리는 중...';
     onlineRoomId = roomId;
+    onlineRoomName = roomName || '';
 
     waitPollTimer = setInterval(async () => {
       try {
@@ -818,9 +843,10 @@ import {
       return;
     }
     savePlayerName(playerName);
+    const roomName = roomNameInput.value.trim();
     try {
-      const { roomId } = await createOnlineRoom(playerName);
-      showWaitingRoom(roomId);
+      const { roomId, roomName: createdName } = await createOnlineRoom(playerName, roomName);
+      showWaitingRoom(roomId, createdName || roomName || `${playerName}의 방`);
     } catch (err) {
       showLobbyError(err.message);
     }

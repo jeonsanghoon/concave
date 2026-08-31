@@ -11,9 +11,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!requireRedisOnVercel(res)) return;
 
-  const { playerId, playerName } = req.body ?? {};
+  const { playerId, playerName, roomName } = req.body ?? {};
   if (!playerId) return res.status(400).json({ error: 'playerId required' });
   if (!playerName?.trim()) return res.status(400).json({ error: 'playerName required' });
+
+  const sanitizedRoomName = (roomName || '').trim().slice(0, 20)
+    || `${playerName.trim().slice(0, 12)}의 방`;
 
   try {
     let roomId;
@@ -24,7 +27,7 @@ export default async function handler(req, res) {
       if (attempts > 10) return res.status(500).json({ error: 'Failed to create room' });
     } while (await getRoom(roomId));
 
-    const room = createRoom(roomId, playerId, playerName.trim().slice(0, 12));
+    const room = createRoom(roomId, playerId, playerName.trim().slice(0, 12), sanitizedRoomName);
     await saveRoom(room);
     await addToRoomIndex(roomId);
 
@@ -38,6 +41,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       roomId,
+      roomName: sanitizedRoomName,
       color: 'black',
       status: 'waiting',
     });

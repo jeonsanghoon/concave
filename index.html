@@ -102,7 +102,11 @@
       </div>
 
       <div class="lobby-panel hidden" id="panel-create">
-        <p class="lobby-desc">방을 만들고 코드를 친구에게 공유하세요.<br>방장은 <strong>흑</strong>으로 먼저 둡니다.</p>
+        <p class="lobby-desc">방 이름을 정하고 생성하세요. 방장은 <strong>흑</strong>으로 먼저 둡니다.</p>
+        <div class="name-field create-room-name">
+          <label for="room-name-input">방 이름</label>
+          <input class="name-input" id="room-name-input" type="text" maxlength="20" placeholder="예: 우리 가족 오목방" autocomplete="off">
+        </div>
         <button class="ctrl-btn lobby-action" id="create-room-btn">새 방 만들기</button>
       </div>
 
@@ -113,6 +117,8 @@
       </div>
 
       <div class="lobby-waiting hidden" id="lobby-waiting">
+        <p class="waiting-label" id="waiting-room-name">방 이름</p>
+        <p class="waiting-room-title" id="waiting-room-title"></p>
         <p class="waiting-label">방 코드</p>
         <div class="room-code-display">
           <span id="room-code-text">------</span>
@@ -143,7 +149,8 @@
       </div>
 
       <div class="room-badge hidden" id="room-badge">
-        방: <span id="room-badge-code"></span>
+        <span id="room-badge-name"></span>
+        <span class="room-badge-code">(<span id="room-badge-code"></span>)</span>
       </div>
 
       <div class="controls">

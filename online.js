@@ -53,11 +53,11 @@ function parseApiError(res, data, fallback) {
   throw new Error(errorMap[data.error] || msg);
 }
 
-export async function createOnlineRoom(playerName) {
+export async function createOnlineRoom(playerName, roomName) {
   const res = await fetch('/api/room/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ playerId: getPlayerId(), playerName }),
+    body: JSON.stringify({ playerId: getPlayerId(), playerName, roomName }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) parseApiError(res, data, '방 생성 실패');
