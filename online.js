@@ -47,7 +47,7 @@ function parseApiError(res, data, fallback) {
   const errorMap = {
     ROOM_NOT_FOUND: '방을 찾을 수 없습니다. 방 목록을 새로고침해 보세요.',
     ROOM_FULL: '방이 가득 찼습니다.',
-    STORAGE_UNAVAILABLE: '서버 저장소(Redis) 연결이 필요합니다. 관리자에게 문의하세요.',
+    STORAGE_UNAVAILABLE: 'Vercel Storage에서 Upstash Redis를 연결한 후 재배포해 주세요.',
     'playerName required': '닉네임을 입력하세요.',
   };
   throw new Error(errorMap[data.error] || msg);
@@ -78,6 +78,9 @@ export async function joinOnlineRoom(roomId, playerName) {
 export async function fetchRoomList() {
   const res = await fetch('/api/room/list');
   const data = await res.json().catch(() => ({}));
+  if (res.status === 503 && data.error === 'STORAGE_UNAVAILABLE') {
+    return { rooms: [], redisConfigured: false };
+  }
   if (!res.ok) throw new Error(data.message || data.error || '방 목록 조회 실패');
   return data;
 }

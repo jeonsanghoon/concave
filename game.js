@@ -140,8 +140,8 @@ import {
   async function refreshRoomList() {
     try {
       const { rooms, redisConfigured } = await fetchRoomList();
-      if (!redisConfigured && window.location.hostname !== 'localhost') {
-        storageWarningEl.textContent = '⚠️ 서버 저장소(Redis) 미연결 — 방 참가가 불가능할 수 있습니다. Vercel에서 Upstash Redis를 연결해 주세요.';
+      if (!redisConfigured) {
+        storageWarningEl.textContent = '⚠️ Upstash Redis 미연결 — Vercel Storage에서 Redis를 연결하고 재배포해 주세요. (로컬/AI/같은기기 대전은 가능)';
         storageWarningEl.classList.remove('hidden');
       } else {
         storageWarningEl.classList.add('hidden');
