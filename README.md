@@ -44,7 +44,7 @@ AUTH_SECRET=랜덤문자열32자이상
 ### 4. 배포 확인
 
 ```
-https://concave-five.vercel.app/api/health
+https://concave-five.vercel.app/api/status
 ```
 
 `ok: true` 이면 모든 기능 사용 가능

@@ -44,7 +44,7 @@ const server = http.createServer(async (req, res) => {
     '/api/auth/register': './api/auth/register.js',
     '/api/auth/login': './api/auth/login.js',
     '/api/auth/me': './api/auth/me.js',
-    '/api/health': './api/health.js',
+    '/api/status': './api/status.js',
   };
 
   if (authRoutes[url.pathname]) {
