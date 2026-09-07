@@ -46,8 +46,9 @@ function parseApiError(res, data, fallback) {
   const msg = data.message || data.error || fallback;
   const errorMap = {
     ROOM_NOT_FOUND: '방을 찾을 수 없습니다. 방 목록을 새로고침해 보세요.',
-    ROOM_FULL: '방이 가득 찼습니다.',
+    ROOM_FULL: '방이 가득 찼습니다. 관전하기를 이용해 주세요.',
     STORAGE_UNAVAILABLE: 'Vercel Storage에서 Upstash Redis를 연결한 후 재배포해 주세요.',
+    NOT_STARTED: '아직 게임이 시작되지 않았습니다. 대기 중인 방은 참가하세요.',
     'playerName required': '닉네임을 입력하세요.',
   };
   throw new Error(errorMap[data.error] || msg);
@@ -72,6 +73,21 @@ export async function joinOnlineRoom(roomId, playerName) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) parseApiError(res, data, '참가 실패');
+  return data;
+}
+
+export async function spectateRoom(roomId) {
+  const res = await fetch(`/api/room/${roomId.toUpperCase()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      playerId: getPlayerId(),
+      playerName: isLoggedIn() ? getCurrentUser().username : '관전자',
+      action: 'spectate',
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) parseApiError(res, data, '관전 입장 실패');
   return data;
 }
 

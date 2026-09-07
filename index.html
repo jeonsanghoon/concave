@@ -92,7 +92,7 @@
 
       <div class="lobby-panel" id="panel-list">
         <div class="room-list-header">
-          <p class="lobby-desc">대기 중인 방 목록입니다. 클릭하면 바로 참가합니다.</p>
+          <p class="lobby-desc">대기 중인 방은 참가, 진행 중인 방은 관전할 수 있습니다.</p>
           <button class="ctrl-btn secondary small-btn" id="refresh-room-list-btn">새로고침</button>
         </div>
         <p class="storage-warning hidden" id="storage-warning"></p>
@@ -111,9 +111,12 @@
       </div>
 
       <div class="lobby-panel hidden" id="panel-join">
-        <p class="lobby-desc">친구에게 받은 6자리 방 코드를 입력하세요.</p>
+        <p class="lobby-desc">방 코드를 입력해 참가하거나 관전하세요.</p>
         <input class="room-input" id="room-code-input" type="text" maxlength="6" placeholder="예: ABC123" autocomplete="off">
-        <button class="ctrl-btn lobby-action" id="join-room-btn">참가하기</button>
+        <div class="join-actions">
+          <button class="ctrl-btn lobby-action" id="join-room-btn">참가하기</button>
+          <button class="ctrl-btn secondary lobby-action" id="spectate-room-btn">관전하기</button>
+        </div>
       </div>
 
       <div class="lobby-waiting hidden" id="lobby-waiting">
@@ -152,6 +155,7 @@
         <span id="room-badge-name"></span>
         <span class="room-badge-code">(<span id="room-badge-code"></span>)</span>
       </div>
+      <div class="spectator-badge hidden" id="spectator-badge">👁 관전 모드</div>
 
       <div class="controls">
         <button class="ctrl-btn" id="undo-btn">한 수 무르기</button>

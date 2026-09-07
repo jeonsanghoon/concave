@@ -1,4 +1,4 @@
-import { joinRoom, applyMove, roomToClient, BLACK, WHITE } from '../../lib/gameLogic.js';
+import { joinRoom, applyMove, addSpectator, roomToClient, BLACK, WHITE } from '../../lib/gameLogic.js';
 import { getRoom, saveRoom, removeFromRoomIndex } from '../../lib/store.js';
 import { requireRedisOnVercel } from '../../lib/vercelCheck.js';
 
@@ -38,6 +38,21 @@ export default async function handler(req, res) {
 
     const { action, row, col, playerName } = req.body ?? {};
 
+    if (action === 'spectate') {
+      if (room.status === 'finished') {
+        return res.status(200).json(roomToClient(room, playerId));
+      }
+      const result = addSpectator(room, playerId, playerName?.trim().slice(0, 12));
+      if (result.role === 'black' || result.role === 'white') {
+        return res.status(200).json({
+          ...roomToClient(result.room, playerId),
+          color: result.role,
+        });
+      }
+      await saveRoom(result.room);
+      return res.status(200).json(roomToClient(result.room, playerId));
+    }
+
     if (action === 'join') {
       if (!playerName?.trim()) {
         return res.status(400).json({ error: 'playerName required', message: '닉네임을 입력하세요.' });
@@ -48,15 +63,11 @@ export default async function handler(req, res) {
       }
 
       if (room.status === 'playing' && room.blackPlayer !== playerId && room.whitePlayer !== playerId) {
-        return res.status(400).json({ error: 'ROOM_FULL', message: '방이 가득 찼습니다.' });
+        return res.status(400).json({ error: 'ROOM_FULL', message: '방이 가득 찼습니다. 관전하기를 이용해 주세요.' });
       }
 
       const result = joinRoom(room, playerId, playerName.trim().slice(0, 12));
       await saveRoom(result.room);
-
-      if (result.room.status === 'playing') {
-        await removeFromRoomIndex(roomId);
-      }
 
       return res.status(200).json({
         ...roomToClient(result.room, playerId),
@@ -81,6 +92,7 @@ export default async function handler(req, res) {
     const code = err.message;
     const messages = {
       ROOM_FULL: '방이 가득 찼습니다.',
+      NOT_STARTED: '아직 게임이 시작되지 않았습니다.',
       NOT_IN_ROOM: '방에 참가하지 않았습니다.',
       NOT_YOUR_TURN: '내 차례가 아닙니다.',
       INVALID_MOVE: '잘못된 위치입니다.',

@@ -1,4 +1,4 @@
-import { listWaitingRooms, isRedisConfigured } from '../../lib/store.js';
+import { listPublicRooms, isRedisConfigured } from '../../lib/store.js';
 import { requireRedisOnVercel } from '../../lib/vercelCheck.js';
 
 export default async function handler(req, res) {
@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   if (!requireRedisOnVercel(res)) return;
 
   try {
-    const rooms = await listWaitingRooms();
+    const rooms = await listPublicRooms();
     return res.status(200).json({
       rooms,
       redisConfigured: isRedisConfigured(),

@@ -496,6 +496,36 @@ body {
   margin-bottom: 1rem;
 }
 
+.room-list-status.join {
+  color: var(--accent);
+}
+
+.room-list-status.spectate {
+  color: #7eb8da;
+}
+
+.join-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.join-actions .lobby-action {
+  flex: 1;
+}
+
+.spectator-badge {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #7eb8da;
+  background: rgba(126, 184, 218, 0.12);
+  border: 1px solid rgba(126, 184, 218, 0.35);
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  margin: 0.5rem auto 0;
+  max-width: 200px;
+}
+
 .room-badge {
   text-align: center;
   font-size: 0.9rem;

@@ -1,6 +1,7 @@
 import {
   createOnlineRoom,
   joinOnlineRoom,
+  spectateRoom,
   fetchRoomState,
   fetchRoomList,
   sendOnlineMove,
@@ -47,6 +48,7 @@ import {
   const roomBadgeEl = document.getElementById('room-badge');
   const roomBadgeCodeEl = document.getElementById('room-badge-code');
   const roomBadgeNameEl = document.getElementById('room-badge-name');
+  const spectatorBadgeEl = document.getElementById('spectator-badge');
   const lobbyErrorEl = document.getElementById('lobby-error');
   const lobbyWaitingEl = document.getElementById('lobby-waiting');
   const roomCodeTextEl = document.getElementById('room-code-text');
@@ -89,6 +91,7 @@ import {
   let onlineRoomId = null;
   let onlineRoomName = '';
   let onlineMyColor = null;
+  let isSpectator = false;
   let onlineNames = { black: '흑', white: '백' };
   let pollTimer = null;
   let waitPollTimer = null;
@@ -156,25 +159,54 @@ import {
       }
 
       if (rooms.length === 0) {
-        roomListEl.innerHTML = '<li class="room-list-empty">대기 중인 방이 없습니다.</li>';
+        roomListEl.innerHTML = '<li class="room-list-empty">참가·관전 가능한 방이 없습니다.</li>';
         return;
       }
 
-      roomListEl.innerHTML = rooms.map(room => `
-        <li class="room-list-item" data-room-id="${room.id}">
+      roomListEl.innerHTML = rooms.map(room => {
+        const isPlaying = room.status === 'playing';
+        const meta = isPlaying
+          ? `${room.id} · ${escapeHtml(room.blackName)} vs ${escapeHtml(room.whiteName || '?')} · ${room.moveCount}수`
+          : `${room.id} · 방장: ${escapeHtml(room.blackName)}`;
+        const actionLabel = isPlaying ? '👁 관전' : '참가 →';
+        const actionClass = isPlaying ? 'spectate' : 'join';
+        return `
+        <li class="room-list-item" data-room-id="${room.id}" data-action="${actionClass}">
           <div>
             <div class="room-list-name">${escapeHtml(room.roomName || room.id)}</div>
-            <div class="room-list-meta">${room.id} · 방장: ${escapeHtml(room.blackName)}</div>
+            <div class="room-list-meta">${meta}${room.spectatorCount ? ` · 관전 ${room.spectatorCount}명` : ''}</div>
           </div>
-          <span class="room-list-status">참가 →</span>
-        </li>
-      `).join('');
+          <span class="room-list-status ${actionClass}">${actionLabel}</span>
+        </li>`;
+      }).join('');
 
       roomListEl.querySelectorAll('.room-list-item').forEach(item => {
-        item.addEventListener('click', () => joinRoomById(item.dataset.roomId));
+        item.addEventListener('click', () => {
+          if (item.dataset.action === 'spectate') {
+            spectateRoomById(item.dataset.roomId);
+          } else {
+            joinRoomById(item.dataset.roomId);
+          }
+        });
       });
     } catch (err) {
       roomListEl.innerHTML = `<li class="room-list-empty">${err.message}</li>`;
+    }
+  }
+
+  async function spectateRoomById(roomId) {
+    hideLobbyError();
+    try {
+      const result = await spectateRoom(roomId);
+      stopPolling();
+      if (result.role === 'black' || result.role === 'white') {
+        startOnlineGame(roomId, result.role, result);
+      } else {
+        startSpectateGame(roomId, result);
+      }
+    } catch (err) {
+      showLobbyError(err.message);
+      refreshRoomList();
     }
   }
 
@@ -371,8 +403,12 @@ import {
     if (state.roomName) updateRoomBadge(state.roomName, state.id);
 
     if (gameOver && state.winner) {
-      const iWon = state.winner === onlineMyColor;
-      showOnlineResult(iWon, state.winner);
+      if (isSpectator) {
+        showSpectatorResult(state.winner);
+      } else {
+        const iWon = state.winner === onlineMyColor;
+        showOnlineResult(iWon, state.winner);
+      }
     }
 
     drawBoard();
@@ -385,7 +421,7 @@ import {
       const state = await fetchRoomState(onlineRoomId);
       if (state.moveCount !== lastSyncedMoveCount || state.status === 'finished') {
         applyRemoteState(state);
-      } else if (state.status === 'playing' && gameMode === 'online' && !gameEl.classList.contains('hidden')) {
+      } else if (state.status === 'playing' && (gameMode === 'online' || gameMode === 'spectate') && !gameEl.classList.contains('hidden')) {
         currentPlayer = state.currentPlayer;
         updateUI();
       }
@@ -441,6 +477,7 @@ import {
   }
 
   function placeStone(row, col) {
+    if (gameMode === 'spectate') return false;
     if (gameMode === 'online') return placeStoneOnline(row, col);
     return placeStoneLocal(row, col);
   }
@@ -492,7 +529,10 @@ import {
 
     if (gameOver) return;
 
-    if (aiThinking) {
+    if (gameMode === 'spectate') {
+      const turnName = currentPlayer === BLACK ? onlineNames.black : onlineNames.white;
+      statusEl.textContent = `${turnName}님 차례 (관전 중)`;
+    } else if (aiThinking) {
       statusEl.textContent = 'AI 생각 중...';
     } else if (gameMode === 'online') {
       const myName = onlineMyColor === BLACK ? onlineNames.black : onlineNames.white;
@@ -512,11 +552,19 @@ import {
         : `${getLocalWhiteName()}님 차례`;
     }
 
-    const canUndo = gameMode !== 'online' && history.length > 0 && !aiThinking;
+    const canUndo = gameMode !== 'online' && gameMode !== 'spectate' && history.length > 0 && !aiThinking;
     undoBtn.disabled = !canUndo;
-    undoBtn.classList.toggle('hidden', gameMode === 'online');
+    undoBtn.classList.toggle('hidden', gameMode === 'online' || gameMode === 'spectate');
 
-    restartBtn.classList.toggle('hidden', gameMode === 'online');
+    restartBtn.classList.toggle('hidden', gameMode === 'online' || gameMode === 'spectate');
+    spectatorBadgeEl.classList.toggle('hidden', gameMode !== 'spectate');
+  }
+
+  function showSpectatorResult(winner) {
+    const winnerName = winner === BLACK ? onlineNames.black : onlineNames.white;
+    resultTitleEl.textContent = '게임 종료';
+    resultMessageEl.textContent = `${winnerName}님 승리`;
+    overlayEl.classList.remove('hidden');
   }
 
   function showOnlineResult(iWon, winner) {
@@ -556,8 +604,10 @@ import {
     stopPolling();
     onlineRoomId = null;
     onlineMyColor = null;
+    isSpectator = false;
 
     roomBadgeEl.classList.add('hidden');
+    spectatorBadgeEl.classList.add('hidden');
 
     if (mode === 'pvc') {
       saveLocalNames(nameBlackInput.value, nameWhiteInput.value);
@@ -577,9 +627,28 @@ import {
     updateUI();
   }
 
+  function startSpectateGame(roomId, state) {
+    onlineRoomId = roomId;
+    onlineMyColor = null;
+    isSpectator = true;
+    gameMode = 'spectate';
+    initBoard();
+    stopPolling();
+
+    updateOnlineNamesFromState(state);
+    roomBadgeEl.classList.remove('hidden');
+    spectatorBadgeEl.classList.remove('hidden');
+    updateRoomBadge(state?.roomName, roomId);
+
+    showGameScreen();
+    applyRemoteState(state);
+    startPolling();
+  }
+
   function startOnlineGame(roomId, myColor, state) {
     onlineRoomId = roomId;
     onlineMyColor = myColor === 'black' ? BLACK : WHITE;
+    isSpectator = false;
     gameMode = 'online';
     initBoard();
     stopPolling();
@@ -594,6 +663,7 @@ import {
     }
 
     roomBadgeEl.classList.remove('hidden');
+    spectatorBadgeEl.classList.add('hidden');
     updateRoomBadge(state?.roomName, roomId);
 
     showGameScreen();
@@ -610,6 +680,7 @@ import {
     stopPolling();
     onlineRoomId = null;
     onlineMyColor = null;
+    isSpectator = false;
     gameMode = null;
     nameWhiteField.classList.remove('hidden');
 
@@ -621,6 +692,8 @@ import {
     lobbyWaitingEl.classList.add('hidden');
     panelCreateEl.classList.remove('hidden');
     panelJoinEl.classList.add('hidden');
+    roomBadgeEl.classList.add('hidden');
+    spectatorBadgeEl.classList.add('hidden');
     hideLobbyError();
     updateUserBar();
   }
@@ -732,6 +805,7 @@ import {
   canvas.addEventListener('click', (e) => {
     if (gameMode === 'pvc' && currentPlayer === WHITE) return;
     if (gameMode === 'online' && currentPlayer !== onlineMyColor) return;
+    if (gameMode === 'spectate') return;
     const pos = canvasToBoard(e.clientX, e.clientY);
     if (pos) placeStone(pos.row, pos.col);
   });
@@ -875,6 +949,16 @@ import {
     }
   });
 
+  document.getElementById('spectate-room-btn').addEventListener('click', async () => {
+    hideLobbyError();
+    const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+    if (code.length !== 6) {
+      showLobbyError('6자리 방 코드를 입력하세요.');
+      return;
+    }
+    await spectateRoomById(code);
+  });
+
   document.getElementById('copy-code-btn').addEventListener('click', async () => {
     const ok = await copyRoomCode(roomCodeTextEl.textContent);
     waitingStatusEl.textContent = ok ? '코드가 복사되었습니다!' : '복사 실패';
@@ -891,7 +975,7 @@ import {
   restartBtn.addEventListener('click', () => startGame(gameMode));
   menuBtn.addEventListener('click', goToMenu);
   playAgainBtn.addEventListener('click', () => {
-    if (gameMode === 'online') {
+    if (gameMode === 'online' || gameMode === 'spectate') {
       goToMenu();
       showOnlineLobby();
     } else {
